@@ -144,4 +144,4 @@ async def ban_by_id(interaction: discord.Interaction, user_id: str):
     except Exception as e:
         await interaction.followup.send(f"❌ فشل التبنيد: {e}", ephemeral=True)
 
-bot.run("MTM4NjIxMDkxMzM1NDI1MjM1OQ.GQhpJ0.DRZEk4ucMII4_a3kCUh0ELsli-r9Wr0ziDutZw")
+bot.run("MTM4NjIxMDkxMzM1NDI1MjM1OQ.Gmln-p.s5andaTHNqV0MVRBIXXa1VNgenDwBYCMPmnsLk")
