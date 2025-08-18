@@ -350,8 +350,7 @@ async def list_words(interaction: discord.Interaction):
 # ====================== RUN ======================
 def main():
     if not TOKEN or TOKEN == "MTM4NjEwNDIzMDk1MDk5ODA0Nw.Gu0_T1.kG-oybRH7ilZOmNH_34M10Hn8ZRCLztXH2ayW8":
-        raise RuntimeError("❌ Discord TOKEN not found! ضع التوكن في متغير البيئة DISCORD_TOKEN أو في config.json")
+        print("❌ Discord TOKEN not found! ضع التوكن في متغير البيئة DISCORD_TOKEN أو في config.json")
+        return  # توقف التشغيل بدل رفع استثناء
+    print(f"🔑 Token loaded: {TOKEN[:10]}...")  # يطبع أول 10 أحرف فقط للتأكيد
     bot.run(TOKEN)
-
-if __name__ == "__main__":
-    main()
