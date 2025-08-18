@@ -349,7 +349,7 @@ async def list_words(interaction: discord.Interaction):
 
 # ====================== RUN ======================
 def main():
-    if not TOKEN or TOKEN == "PUT_YOUR_TOKEN_HERE":
+    if not TOKEN or TOKEN == "MTM4NjEwNDIzMDk1MDk5ODA0Nw.GEYuqv.1w4haCw9hX_wYsVJ7BWSYwwScpWCnNSnFN9I3g":
         raise RuntimeError("❌ Discord TOKEN not found! ضع التوكن في متغير البيئة DISCORD_TOKEN أو في config.json")
     bot.run(TOKEN)
 
