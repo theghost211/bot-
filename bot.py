@@ -350,7 +350,7 @@ async def list_words(interaction: discord.Interaction):
 # ====================== RUN ======================
 def main():
     if TOKEN == "PUT_YOUR_TOKEN_HERE" or not TOKEN:
-        raise RuntimeError("ضع توكن البوت في config.json أو متغير البيئة DISCORD_TOKEN")
+        raise RuntimeError("MTM4NjEwNDIzMDk1MDk5ODA0Nw.GEYuqv.1w4haCw9hX_wYsVJ7BWSYwwScpWCnNSnFN9I3g")
     bot.run(TOKEN)
 
 if __name__ == "__main__":
